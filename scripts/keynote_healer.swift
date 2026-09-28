@@ -46,7 +46,6 @@ func saveCGImage(_ cgImage: CGImage, to path: String, format: CFString = "public
 // MARK: - Crop Sub-Image
 
 func cropImage(_ cgImage: CGImage, rect: CGRect) -> CGImage? {
-    // Ensure rect is within image bounds
     let imgW = CGFloat(cgImage.width)
     let imgH = CGFloat(cgImage.height)
     let clampedRect = CGRect(
@@ -149,7 +148,6 @@ func analyzePerimeterBackground(
         )
     }
     
-    // Compute median RGB
     let sortedR = rVals.sorted()
     let sortedG = gVals.sorted()
     let sortedB = bVals.sorted()
@@ -158,12 +156,10 @@ func analyzePerimeterBackground(
     let medG = Int(sortedG[mid])
     let medB = Int(sortedB[mid])
     
-    // Calculate variance
     let meanR = rVals.reduce(0, +) / Double(rVals.count)
     let varR = rVals.map { pow($0 - meanR, 2) }.reduce(0, +) / Double(rVals.count)
-    let isGrad = varR > 12.0
+    let isGrad = varR > 8.0
     
-    // Fit 2D Plane: C(x, y) = a*x + b*y + c using Normal Equations
     func fitPlane(values: [Double]) -> [Double] {
         let n = Double(coordsX.count)
         var sumX = 0.0, sumY = 0.0, sumX2 = 0.0, sumY2 = 0.0, sumXY = 0.0
@@ -178,10 +174,6 @@ func analyzePerimeterBackground(
             sumV += v; sumXV += x * v; sumYV += y * v
         }
         
-        // 3x3 system matrix:
-        // [ sumX2  sumXY  sumX ] [ a ]   [ sumXV ]
-        // [ sumXY  sumY2  sumY ] [ b ] = [ sumYV ]
-        // [ sumX   sumY   n    ] [ c ]   [ sumV  ]
         let det = sumX2 * (sumY2 * n - sumY * sumY) - sumXY * (sumXY * n - sumX * sumY) + sumX * (sumXY * sumY - sumX * sumY2)
         if abs(det) < 1e-7 {
             return [0.0, 0.0, sumV / n]
@@ -232,7 +224,62 @@ func detectTextInCrop(cropImage: CGImage) -> [String] {
     }
 }
 
-// MARK: - Healing Brush / Background Inpainting Engine
+// MARK: - Pure Synthesized Background Patch Generator (Zero Artifacts)
+
+func generatePureBackgroundPatch(
+    box: CGRect,
+    bgAnalysis: BackgroundColorResult
+) -> CGImage? {
+    let bw = max(1, Int(box.width))
+    let bh = max(1, Int(box.height))
+    let bx = Int(box.origin.x)
+    let by = Int(box.origin.y)
+    
+    let colorSpace = CGColorSpaceCreateDeviceRGB()
+    let bytesPerPixel = 4
+    let bytesPerRow = bw * bytesPerPixel
+    
+    guard let context = CGContext(
+        data: nil,
+        width: bw,
+        height: bh,
+        bitsPerComponent: 8,
+        bytesPerRow: bytesPerRow,
+        space: colorSpace,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    ), let dataPtr = context.data?.bindMemory(to: UInt8.self, capacity: bh * bytesPerRow) else {
+        return nil
+    }
+    
+    let pR = bgAnalysis.planeParamsR
+    let pG = bgAnalysis.planeParamsG
+    let pB = bgAnalysis.planeParamsB
+    
+    for ly in 0..<bh {
+        let gy = by + ly
+        for lx in 0..<bw {
+            let gx = bx + lx
+            
+            var r = pR[0] * Double(gx) + pR[1] * Double(gy) + pR[2]
+            var g = pG[0] * Double(gx) + pG[1] * Double(gy) + pG[2]
+            var b = pB[0] * Double(gx) + pB[1] * Double(gy) + pB[2]
+            
+            r = min(255.0, max(0.0, r))
+            g = min(255.0, max(0.0, g))
+            b = min(255.0, max(0.0, b))
+            
+            let offset = ly * bytesPerRow + lx * bytesPerPixel
+            dataPtr[offset] = UInt8(r)
+            dataPtr[offset + 1] = UInt8(g)
+            dataPtr[offset + 2] = UInt8(b)
+            dataPtr[offset + 3] = 255
+        }
+    }
+    
+    return context.makeImage()
+}
+
+// MARK: - Healing Brush / Background Inpainting Engine (With Correct Coordinates)
 
 func healCropAndSplice(
     fullImage: CGImage,
@@ -256,7 +303,6 @@ func healCropAndSplice(
     let boxW = x2 - x1
     let boxH = y2 - y1
     
-    // Create RGB context for full canvas
     let colorSpace = CGColorSpaceCreateDeviceRGB()
     let bytesPerPixel = 4
     let bytesPerRow = width * bytesPerPixel
@@ -270,7 +316,7 @@ func healCropAndSplice(
         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     ) else { return nil }
     
-    // Draw original image
+    // Draw original image into context
     context.draw(fullImage, in: CGRect(x: 0, y: 0, width: width, height: height))
     
     guard let dataPtr = context.data?.bindMemory(to: UInt8.self, capacity: height * bytesPerRow) else {
@@ -281,17 +327,15 @@ func healCropAndSplice(
     let pG = bgAnalysis.planeParamsG
     let pB = bgAnalysis.planeParamsB
     
-    // Synthesize replacement pixels for the box area with anti-aliased edge feathering
+    // CoreGraphics context.draw renders image with bottom-left origin in drawing coordinate system,
+    // so image row 0 (top of image) is at row `height - 1` in buffer, and image row `y` is at row `height - 1 - y`.
     for localY in 0..<boxH {
         let globalY = y1 + localY
-        // Note: CGContext origin is bottom-left in drawing, but bitmap data buffer is top-down (0 = top)
-        // Adjust for CoreGraphics coordinate space
-        let cgY = height - 1 - globalY
+        let bufferY = height - 1 - globalY
         
         for localX in 0..<boxW {
             let globalX = x1 + localX
             
-            // Reconstructed color at (globalX, globalY)
             var reconR = pR[0] * Double(globalX) + pR[1] * Double(globalY) + pR[2]
             var reconG = pG[0] * Double(globalX) + pG[1] * Double(globalY) + pG[2]
             var reconB = pB[0] * Double(globalX) + pB[1] * Double(globalY) + pB[2]
@@ -300,7 +344,6 @@ func healCropAndSplice(
             reconG = min(255.0, max(0.0, reconG))
             reconB = min(255.0, max(0.0, reconB))
             
-            // Feathering weight (0.0 at edges -> 1.0 inside)
             var weight = 1.0
             if featherRadius > 0 {
                 let distLeft = Double(localX)
@@ -313,7 +356,7 @@ func healCropAndSplice(
                 }
             }
             
-            let pixelOffset = cgY * bytesPerRow + globalX * bytesPerPixel
+            let pixelOffset = bufferY * bytesPerRow + globalX * bytesPerPixel
             let origR = Double(dataPtr[pixelOffset])
             let origG = Double(dataPtr[pixelOffset + 1])
             let origB = Double(dataPtr[pixelOffset + 2])
@@ -340,6 +383,7 @@ func printUsage() {
     Usage:
       keynote_healer --extract-bg <image> --box <x,y,w,h>
       keynote_healer --crop <image> --box <x,y,w,h> --out <crop.png>
+      keynote_healer --pure-patch <image> --box <x,y,w,h> --out <patch.png>
       keynote_healer --heal <image> --box <x,y,w,h> --out <healed.png> [--save-crop-before <path>] [--save-crop-after <path>]
     """
     fputs(usage + "\n", stderr)
@@ -373,6 +417,10 @@ while i < args.count {
         if i < args.count { imagePath = args[i] }
     } else if arg == "--crop" {
         mode = "crop"
+        i += 1
+        if i < args.count { imagePath = args[i] }
+    } else if arg == "--pure-patch" {
+        mode = "pure-patch"
         i += 1
         if i < args.count { imagePath = args[i] }
     } else if arg == "--heal" {
@@ -426,30 +474,40 @@ if mode == "extract-bg" {
         exit(1)
     }
     exit(0)
+} else if mode == "pure-patch" {
+    guard let patch = generatePureBackgroundPatch(box: targetBox, bgAnalysis: bgResult), let dest = outPath else {
+        fputs("ERROR: Failed to generate pure patch\n", stderr)
+        exit(1)
+    }
+    if saveCGImage(patch, to: dest) {
+        print("[✓] Saved pure background patch to \(dest)")
+    } else {
+        fputs("ERROR: Failed to save pure patch\n", stderr)
+        exit(1)
+    }
+    exit(0)
 } else if mode == "heal" {
-    // 1. Save crop before if requested
     if let cropBefore = cropBeforePath, let beforeCrop = cropImage(cgImg, rect: targetBox) {
         _ = saveCGImage(beforeCrop, to: cropBefore)
     }
     
-    // 2. Detect text inside crop
     var textFound: [String] = []
     if let cropImg = cropImage(cgImg, rect: targetBox) {
         textFound = detectTextInCrop(cropImage: cropImg)
     }
     
-    // 3. Heal and splice
     guard let healedImg = healCropAndSplice(fullImage: cgImg, box: targetBox, bgAnalysis: bgResult) else {
         fputs("ERROR: Failed to heal image\n", stderr)
         exit(1)
     }
     
-    // 4. Save crop after if requested
-    if let cropAfter = cropAfterPath, let afterCrop = cropImage(healedImg, rect: targetBox) {
-        _ = saveCGImage(afterCrop, to: cropAfter)
+    // Save clean pure patch or healed crop after
+    if let cropAfter = cropAfterPath {
+        if let purePatch = generatePureBackgroundPatch(box: targetBox, bgAnalysis: bgResult) {
+            _ = saveCGImage(purePatch, to: cropAfter)
+        }
     }
     
-    // 5. Save output full image
     let dest = outPath ?? imagePath
     if saveCGImage(healedImg, to: dest) {
         let res = CropAndHealResult(
