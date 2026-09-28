@@ -351,11 +351,11 @@ func healCropAndSplice(
     let pB = bgAnalysis.planeParamsB
     let noiseAmp = min(sqrt(bgAnalysis.noiseVariance) * 1.732, 40.0)
     
-    // CoreGraphics context.draw renders image with bottom-left origin in drawing coordinate system,
-    // so image row 0 (top of image) is at row `height - 1` in buffer, and image row `y` is at row `height - 1 - y`.
+    // CoreGraphics context.draw renders image into the context. We will modify the buffer directly.
+    // For CGContext on macOS (without explicit CTM flips), Y=0 in the buffer is the top row.
     for localY in 0..<boxH {
         let globalY = y1 + localY
-        let bufferY = height - 1 - globalY
+        let bufferY = globalY
         
         for localX in 0..<boxW {
             let globalX = x1 + localX
