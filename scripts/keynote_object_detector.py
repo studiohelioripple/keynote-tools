@@ -288,13 +288,25 @@ def process_keynote_masking(
             pure_patch_out = tmp_path / f"slide_{s_idx:02d}_pure_patch.png"
 
             # 1. Run GPU healing on slide image
-            h_res = run_swift_healer([
-                "--heal", slide_img,
-                "--box", box_str,
-                "--out", str(healed_img_out),
-                "--save-crop-after", str(pure_patch_out)
-            ])
-            bg_hex = h_res.get("background", {}).get("hex", "#FFFFFF")
+            if strategy == "direct-inpaint":
+                import shutil
+                shutil.copy(slide_img, str(healed_img_out))
+                res = subprocess.run([
+                    "/Users/amen/.gemini/config/skills/apple-watermark-cleaner/venv/bin/python3",
+                    "/Users/amen/.gemini/config/skills/apple-watermark-cleaner/scripts/clean_watermarks.py",
+                    "--file", str(healed_img_out)
+                ], capture_output=True, text=True)
+                if res.returncode != 0:
+                    print(f"Watermark cleaner error: {res.stderr}")
+                bg_hex = "#AUTO"
+            else:
+                h_res = run_swift_healer([
+                    "--heal", slide_img,
+                    "--box", box_str,
+                    "--out", str(healed_img_out),
+                    "--save-crop-after", str(pure_patch_out)
+                ])
+                bg_hex = h_res.get("background", {}).get("hex", "#FFFFFF")
 
             if save_crops_dir:
                 save_crops_dir.mkdir(parents=True, exist_ok=True)
