@@ -193,14 +193,20 @@ func analyzePerimeterBackground(
     let planeG = fitPlane(values: gVals)
     let planeB = fitPlane(values: bVals)
     
-    var sumSqRes = 0.0
+    var residuals: [Double] = []
     for i in 0..<coordsX.count {
         let x = coordsX[i]
         let y = coordsY[i]
         let predR = planeR[0] * x + planeR[1] * y + planeR[2]
-        sumSqRes += pow(rVals[i] - predR, 2)
+        residuals.append(rVals[i] - predR)
     }
-    let noiseVar = sumSqRes / Double(coordsX.count)
+    residuals.sort()
+    let medRes = residuals[residuals.count / 2]
+    var absDevs = residuals.map { abs($0 - medRes) }
+    absDevs.sort()
+    let mad = absDevs[absDevs.count / 2]
+    let robustStdDev = 1.4826 * mad
+    let noiseVar = pow(robustStdDev, 2)
     
     let kR = min(65535, max(0, Int(Double(medR) * 257.0)))
     let kG = min(65535, max(0, Int(Double(medG) * 257.0)))
@@ -269,7 +275,7 @@ func generatePureBackgroundPatch(
     let pB = bgAnalysis.planeParamsB
     
     // N = sqrt(3 * variance) for uniform distribution to match variance
-    let noiseAmp = min(sqrt(bgAnalysis.noiseVariance) * 1.732, 40.0)
+    let noiseAmp = min(sqrt(bgAnalysis.noiseVariance) * 1.732, 12.0)
     
     for ly in 0..<bh {
         let gy = by + ly
@@ -349,7 +355,7 @@ func healCropAndSplice(
     let pR = bgAnalysis.planeParamsR
     let pG = bgAnalysis.planeParamsG
     let pB = bgAnalysis.planeParamsB
-    let noiseAmp = min(sqrt(bgAnalysis.noiseVariance) * 1.732, 40.0)
+    let noiseAmp = min(sqrt(bgAnalysis.noiseVariance) * 1.732, 12.0)
     
     // CoreGraphics context.draw renders image into the context. We will modify the buffer directly.
     // For CGContext on macOS (without explicit CTM flips), Y=0 in the buffer is the top row.
