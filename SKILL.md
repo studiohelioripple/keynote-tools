@@ -91,6 +91,7 @@ Keynote's AppleScript dictionary does **not** allow directly setting `fill`, `co
 1. **Dominant Color Extraction**: Samples the dominant background color of the perimeter region.
 2. **Solid PNG Generation**: Generates a flat, solid-colored PNG patch (e.g. 100% `#FFFFFF`) dynamically.
 3. **Rectangle Simulation Injection**: Injects this PNG as an `image` object over the target zone. This perfectly simulates inserting a borderless native `shape` rectangle colored exactly like the local solid background, cleanly bypassing the AppleScript `shape fill` limitation.
+4. **Layout Edge Extension (`--extend-to-edge` / `--extend-right`)**: Extends the mask boundary horizontally to the absolute edge of the slide canvas (`width = canvas_w - x`), ensuring zero gap between the mask and the slide border.
 
 ---
 

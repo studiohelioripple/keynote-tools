@@ -227,6 +227,7 @@ def process_keynote_masking(
     strategy: str = "native-shape",
     zone: str = "bottom-right",
     slides_range: str = "all",
+    extend_to_edge: bool = False,
     save_crops_dir: Optional[Path] = None
 ) -> None:
     """Applies masking according to the specified strategy across slides."""
@@ -282,6 +283,13 @@ def process_keynote_masking(
                 target_box = [int(canvas_w * 0.90), int(canvas_h * 0.95), int(canvas_w * 0.09), int(canvas_h * 0.04)]
 
             bx, by, bw, bh = target_box
+            if extend_to_edge:
+                if "right" in zone:
+                    bx = min(bx, int(canvas_w * 0.90))
+                    bw = int(canvas_w - bx)
+                elif "left" in zone:
+                    bw = int(bx + bw)
+                    bx = 0
             box_str = f"{bx},{by},{bw},{bh}"
 
             healed_img_out = tmp_path / f"slide_{s_idx:02d}_healed.png"
@@ -456,6 +464,7 @@ Examples:
     parser.add_argument("--slides", type=str, default="all", help="Slide selection: 'all', 'current', or '1,3,5-8'")
     parser.add_argument("--zone", type=str, default="bottom-right", choices=["bottom-right", "bottom-left", "top-right", "top-left", "header", "footer", "all"], help="Spatial target zone")
     parser.add_argument("--strategy", type=str, default="native-shape", choices=["native-shape", "clean-image", "direct-inpaint", "solid-shape"], help="Masking strategy to apply")
+    parser.add_argument("--extend-to-edge", "--extend-right", action="store_true", default=False, help="Extend mask object horizontally to the canvas edge")
     parser.add_argument("--save-crops", type=str, help="Directory to save before/after cropped inspection patches")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
 
@@ -490,6 +499,7 @@ Examples:
         strategy=args.strategy,
         zone=args.zone,
         slides_range=args.slides,
+        extend_to_edge=args.extend_to_edge,
         save_crops_dir=save_crops_path
     )
 
