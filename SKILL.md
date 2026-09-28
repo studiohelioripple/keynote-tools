@@ -83,10 +83,14 @@ Keynote's AppleScript dictionary does **not** allow directly setting `fill`, `co
 4. **Keynote Injection**: Injects this patch into Keynote as an `image` object that overlays the unwanted content seamlessly.
 
 ### Mode B: Direct Background Inpainting (`direct-inpaint` / `--heal`)
-1. **Artifact/Text Detection**: Runs Apple Vision OCR (`VNRecognizeTextRequest`) to identify text and defect bounds.
-2. **GPU-Accelerated Retouching**: Executes multi-pass CoreImage / Metal inpainting, combining 2D bilinear gradient reconstruction with the newly calculated noise variance (texture synthesis).
-3. **Feathered Splicing**: Merges the textured healed crop back into the full slide canvas with anti-aliased edge feathering.
-4. **Keynote Re-injection**: Injects the fully healed image back as the main background of the slide (replacing `image 1`).
+1. **Apple Vision Tight Segmentation**: Shells out to the `apple-watermark-cleaner` skill, utilizing `VNRecognizeTextRequest` and localized background delta thresholding to strictly segment ink strokes.
+2. **Navier-Stokes AI Inpainting**: Runs OpenCV Fast Marching (Telea) / Navier-Stokes background inpainting over the slide image to flawlessly reconstruct the canvas texture.
+3. **Keynote Re-injection**: Injects the fully healed image back as the main background of the slide (replacing `image 1`).
+
+### Mode C: Solid Color Rectangle Simulation (`solid-shape`)
+1. **Dominant Color Extraction**: Samples the dominant background color of the perimeter region.
+2. **Solid PNG Generation**: Generates a flat, solid-colored PNG patch (e.g. 100% `#FFFFFF`) dynamically.
+3. **Rectangle Simulation Injection**: Injects this PNG as an `image` object over the target zone. This perfectly simulates inserting a borderless native `shape` rectangle colored exactly like the local solid background, cleanly bypassing the AppleScript `shape fill` limitation.
 
 ---
 

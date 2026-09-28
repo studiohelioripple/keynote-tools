@@ -288,6 +288,7 @@ def process_keynote_masking(
             pure_patch_out = tmp_path / f"slide_{s_idx:02d}_pure_patch.png"
 
             # 1. Run GPU healing on slide image
+            solid_patch_out = tmp_path / f"slide_{s_idx:02d}_solid.png"
             if strategy == "direct-inpaint":
                 import shutil
                 shutil.copy(slide_img, str(healed_img_out))
@@ -307,7 +308,18 @@ def process_keynote_masking(
                     "--save-crop-after", str(pure_patch_out)
                 ])
                 bg_hex = h_res.get("background", {}).get("hex", "#FFFFFF")
-
+                
+                if strategy in ["solid-patch", "solid-shape"]:
+                    # Create a flat solid-color patch using the detected dominant hex
+                    hex_color = bg_hex.lstrip('#')
+                    if len(hex_color) != 6: hex_color = "FFFFFF"
+                    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+                    subprocess.run([
+                        "/Users/amen/.gemini/config/skills/apple-watermark-cleaner/venv/bin/python3",
+                        "-c",
+                        f"import cv2, numpy as np; img = np.zeros(({bh}, {bw}, 3), dtype=np.uint8); img[:] = ({b}, {g}, {r}); cv2.imwrite('{solid_patch_out}', img)"
+                    ], check=True)
+            
             if save_crops_dir:
                 save_crops_dir.mkdir(parents=True, exist_ok=True)
                 run_swift_healer(["--crop", slide_img, "--box", box_str, "--out", str(save_crops_dir / f"slide_{s_idx:02d}_before.png")])
@@ -352,7 +364,8 @@ def process_keynote_masking(
                     end tell
                 end tell
                 """
-            elif strategy in ["clean-image", "image-patch", "patch"]:
+            elif strategy in ["clean-image", "image-patch", "patch", "solid-patch", "solid-shape"]:
+                target_patch = solid_patch_out if strategy in ["solid-patch", "solid-shape"] else pure_patch_out
                 as_script = f"""
                 tell application "Keynote"
                     tell front document
@@ -375,8 +388,8 @@ def process_keynote_masking(
                                 delete image i
                             end repeat
                             
-                            -- Insert 100% pure resampled background patch
-                            set maskObj to make new image with properties {{file:POSIX file "{pure_patch_out.resolve()}"}}
+                            -- Insert 100% pure resampled background patch (or solid color rectangle simulation)
+                            set maskObj to make new image with properties {{file:POSIX file "{target_patch.resolve()}"}}
                             set width of maskObj to {bw}
                             set height of maskObj to {bh}
                             set position of maskObj to {{{bx}, {by}}}
@@ -442,7 +455,7 @@ Examples:
     parser.add_argument("--info", action="store_true", help="List native objects and spatial zones on slide(s)")
     parser.add_argument("--slides", type=str, default="all", help="Slide selection: 'all', 'current', or '1,3,5-8'")
     parser.add_argument("--zone", type=str, default="bottom-right", choices=["bottom-right", "bottom-left", "top-right", "top-left", "header", "footer", "all"], help="Spatial target zone")
-    parser.add_argument("--strategy", type=str, default="native-shape", choices=["native-shape", "clean-image", "direct-inpaint"], help="Masking strategy to apply")
+    parser.add_argument("--strategy", type=str, default="native-shape", choices=["native-shape", "clean-image", "direct-inpaint", "solid-shape"], help="Masking strategy to apply")
     parser.add_argument("--save-crops", type=str, help="Directory to save before/after cropped inspection patches")
     parser.add_argument("--json", action="store_true", help="Output results in JSON format")
 
