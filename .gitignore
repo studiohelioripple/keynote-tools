@@ -12,3 +12,6 @@ __pycache__/
 .venv
 env/
 venv/
+scripts/keynote_healer
+.cache/
+
