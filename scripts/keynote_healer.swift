@@ -11,6 +11,7 @@ struct BackgroundColorResult: Codable {
     let hex: String                // #RRGGBB
     let isGradient: Bool
     let gradientVariance: Double
+    let noiseVariance: Double
     let planeParamsR: [Double]     // a, b, c
     let planeParamsG: [Double]     // a, b, c
     let planeParamsB: [Double]     // a, b, c
@@ -91,6 +92,7 @@ func analyzePerimeterBackground(
             hex: "#808080",
             isGradient: false,
             gradientVariance: 0,
+            noiseVariance: 0,
             planeParamsR: [0, 0, 128],
             planeParamsG: [0, 0, 128],
             planeParamsB: [0, 0, 128]
@@ -142,6 +144,7 @@ func analyzePerimeterBackground(
             hex: "#808080",
             isGradient: false,
             gradientVariance: 0,
+            noiseVariance: 0,
             planeParamsR: [0, 0, 128],
             planeParamsG: [0, 0, 128],
             planeParamsB: [0, 0, 128]
@@ -190,6 +193,15 @@ func analyzePerimeterBackground(
     let planeG = fitPlane(values: gVals)
     let planeB = fitPlane(values: bVals)
     
+    var sumSqRes = 0.0
+    for i in 0..<coordsX.count {
+        let x = coordsX[i]
+        let y = coordsY[i]
+        let predR = planeR[0] * x + planeR[1] * y + planeR[2]
+        sumSqRes += pow(rVals[i] - predR, 2)
+    }
+    let noiseVar = sumSqRes / Double(coordsX.count)
+    
     let kR = min(65535, max(0, Int(Double(medR) * 257.0)))
     let kG = min(65535, max(0, Int(Double(medG) * 257.0)))
     let kB = min(65535, max(0, Int(Double(medB) * 257.0)))
@@ -201,6 +213,7 @@ func analyzePerimeterBackground(
         hex: hexStr,
         isGradient: isGrad,
         gradientVariance: varR,
+        noiseVariance: noiseVar,
         planeParamsR: planeR,
         planeParamsG: planeG,
         planeParamsB: planeB
@@ -255,6 +268,9 @@ func generatePureBackgroundPatch(
     let pG = bgAnalysis.planeParamsG
     let pB = bgAnalysis.planeParamsB
     
+    // N = sqrt(3 * variance) for uniform distribution to match variance
+    let noiseAmp = min(sqrt(bgAnalysis.noiseVariance) * 1.732, 40.0)
+    
     for ly in 0..<bh {
         let gy = by + ly
         for lx in 0..<bw {
@@ -263,6 +279,13 @@ func generatePureBackgroundPatch(
             var r = pR[0] * Double(gx) + pR[1] * Double(gy) + pR[2]
             var g = pG[0] * Double(gx) + pG[1] * Double(gy) + pG[2]
             var b = pB[0] * Double(gx) + pB[1] * Double(gy) + pB[2]
+            
+            if noiseAmp > 0.5 {
+                let noise = Double.random(in: -noiseAmp...noiseAmp)
+                r += noise
+                g += noise
+                b += noise
+            }
             
             r = min(255.0, max(0.0, r))
             g = min(255.0, max(0.0, g))
@@ -326,6 +349,7 @@ func healCropAndSplice(
     let pR = bgAnalysis.planeParamsR
     let pG = bgAnalysis.planeParamsG
     let pB = bgAnalysis.planeParamsB
+    let noiseAmp = min(sqrt(bgAnalysis.noiseVariance) * 1.732, 40.0)
     
     // CoreGraphics context.draw renders image with bottom-left origin in drawing coordinate system,
     // so image row 0 (top of image) is at row `height - 1` in buffer, and image row `y` is at row `height - 1 - y`.
@@ -339,6 +363,13 @@ func healCropAndSplice(
             var reconR = pR[0] * Double(globalX) + pR[1] * Double(globalY) + pR[2]
             var reconG = pG[0] * Double(globalX) + pG[1] * Double(globalY) + pG[2]
             var reconB = pB[0] * Double(globalX) + pB[1] * Double(globalY) + pB[2]
+            
+            if noiseAmp > 0.5 {
+                let noise = Double.random(in: -noiseAmp...noiseAmp)
+                reconR += noise
+                reconG += noise
+                reconB += noise
+            }
             
             reconR = min(255.0, max(0.0, reconR))
             reconG = min(255.0, max(0.0, reconG))
