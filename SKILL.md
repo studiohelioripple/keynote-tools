@@ -66,21 +66,27 @@ python3 ~/.gemini/config/skills/keynote-tools/scripts/keynote_object_detector.py
 
 ---
 
-## 4. Dual-Mode Shape Masking & Apple Vision Healing Pipeline
+## 4. Apple Vision Masking & Texture-Synthesized Healing Pipeline
 
-When slides contain unwanted badges, buttons, watermarks, or rectangles in specific positions (e.g. bottom-right corner):
+When slides contain unwanted badges, buttons, watermarks, or rectangles in specific positions (e.g., bottom-right corner), masking them requires bypassing native Keynote AppleScript limitations and matching background texture accurately.
 
-### Mode A: Shape Background Fill Matching & Masking (`--match-shape-color`)
-1. **Sub-Image Crop**: Crops the exact bounding region of the slide image directly beneath the Keynote shape.
-2. **Perimeter Detrending**: Samples outer boundary pixels (excluding interior text/icons) and solves least squares for 2D surface equations:
+**CRITICAL APPLESCRIPT INVARIANT:**
+Keynote's AppleScript dictionary does **not** allow directly setting `fill`, `color`, or `stroke` properties on native `shape` objects. GUI scripting for these properties often fails due to strict macOS Accessibility sandboxing. 
+**Solution:** To perfectly mask areas without ugly default borders, either inject a generated `.png` patch as a borderless `image` object (`make new image with properties {file: ...}`), or directly inpaint the main background image (`direct-inpaint`).
+
+### Mode A: Synthesized Texture-Aware Patch Injection (`clean-image`)
+1. **Sub-Image Crop**: Crops the exact bounding region of the slide image.
+2. **Perimeter Detrending & Texture Estimation**: Samples outer boundary pixels. Solves least squares for 2D surface gradient equations:
    $$R(x, y) = a_r x + b_r y + c_r,\quad G(x, y) = a_g x + b_g y + c_g,\quad B(x, y) = a_b x + b_b y + c_b$$
-3. **Keynote Shape Fill Adaptation**: Computes exact 16-bit RGB values `(0..65535)` and updates the Keynote shape's background fill color in-place so it seamlessly masks the underlying image area.
+   Calculates the variance of the residuals to estimate the actual high-frequency noise (grain/texture) of the slide background.
+3. **Patch Generation**: Synthesizes a pure patch combining the 2D gradient and uniform random noise matched exactly to the residual variance.
+4. **Keynote Injection**: Injects this patch into Keynote as an `image` object that overlays the unwanted content seamlessly.
 
-### Mode B: Local Apple Vision & CoreImage Healing Brush (`--heal-underneath`)
-1. **Artifact/Text Detection**: Runs Apple Vision OCR (`VNRecognizeTextRequest`) on the cropped area to identify text and defect bounds.
-2. **GPU-Accelerated Retouching**: Executes multi-pass CoreImage / Metal inpainting and 2D bilinear gradient reconstruction on Apple Silicon GPU.
-3. **Feathered Splicing**: Merges the healed crop back into the full slide canvas with anti-aliased edge feathering.
-4. **Keynote Re-injection**: Injects the healed graphic back into the active Keynote presentation in-place and saves the document.
+### Mode B: Direct Background Inpainting (`direct-inpaint` / `--heal`)
+1. **Artifact/Text Detection**: Runs Apple Vision OCR (`VNRecognizeTextRequest`) to identify text and defect bounds.
+2. **GPU-Accelerated Retouching**: Executes multi-pass CoreImage / Metal inpainting, combining 2D bilinear gradient reconstruction with the newly calculated noise variance (texture synthesis).
+3. **Feathered Splicing**: Merges the textured healed crop back into the full slide canvas with anti-aliased edge feathering.
+4. **Keynote Re-injection**: Injects the fully healed image back as the main background of the slide (replacing `image 1`).
 
 ---
 
