@@ -12,6 +12,8 @@ A comprehensive suite and agent skill for programmatic **Apple Keynote** (`.key`
 
 ## ✨ Key Capabilities
 
+- 🏗️ **Declarative Deck Builder**: Programmatically generate complete presentations from structured JSON/YAML specifications (`knt build --spec deck.json`) with auto-layout for title heroes, comparison splits, KPI metric grids, tables, and terminal code blocks.
+- 🎨 **8 Curated Design Themes & Visual Palettes**: Instant access to 8 handcrafted visual styles (`amil-light`, `amil-dark`, `terminal-dark`, `apple-light`, `apple-dark`, `nord-frost`, `cyberpunk-neon`, `editorial-serif`) with matched typography, semantic accents, and contrast-tested container tokens.
 - 🎯 **Spatial Object Detection by Position**: Queries and detects native Keynote items (`shapes`, `text items`, `images`, `tables`) and slide graphic elements filtered by spatial quadrants or custom bounding boxes (`bottom-right`, `bottom-left`, `top-right`, `top-left`, `footer`, `header`, or custom rects).
 - 🎨 **Shape Background Color Matching & Masking (`--match-shape-color`)**: Crops the exact slide image region underneath any target shape, extracts the true background color (and 2D gradient surface), and adapts the Keynote shape's fill color so it serves as a seamless masking overlay.
 - 🖌️ **Local Apple Vision & CoreImage Healing Brush (`--heal-underneath`)**: Leverages local macOS `Vision` framework (OCR text & artifact detection) and GPU-accelerated `CoreImage` / `Metal` inpainting to repair and retouch underlying slide images in-place (Apple Photos Clean Up style).
@@ -26,7 +28,7 @@ A comprehensive suite and agent skill for programmatic **Apple Keynote** (`.key`
 - 🎨 **Strict Palette Invariant & Box Minimization**: Eliminates clashing foreign white/black boxes. Elements and typography sit directly on the presentation's canonical gradient canvas.
 - 👁️ **Embedded Infographic Preservation**: Intelligently distinguishes between editorial copy and internal diagram labels (inside 3D models, flowcharts, schematics), leaving graphical text intact without blurry inpainting.
 - ⚡ **Hybrid AI Architecture**: Seamlessly routes fast OCR cleanup, bounding-box parsing, and structured data extraction to local Ollama models (`Qwen2.5-coder`, `moondream`), while cloud models guide narrative strategy.
-- 🍏 **Robust AppleScript Bridge**: Programmatically inspects, inserts, duplicates, splits, cleans, and restyles slides via native macOS AppleScript events (`slide_image_bridge.py`, `keynote_object_detector.py`).
+- 🍏 **Robust AppleScript Bridge**: Programmatically inspects, inserts, duplicates, splits, cleans, and restyles slides via native macOS AppleScript events (`keynote_client.py`, `slide_image_bridge.py`, `keynote_object_detector.py`).
 
 ---
 
@@ -34,10 +36,17 @@ A comprehensive suite and agent skill for programmatic **Apple Keynote** (`.key`
 
 | Tool | Language | Description |
 |---|---|---|
+| [`scripts/keynote_tool.py`](scripts/keynote_tool.py) (`knt`) | Python 3 | Unified Keynote CLI: deck building, themes, slide manipulation, inspection, and export. |
+| [`scripts/deck_builder.py`](scripts/deck_builder.py) | Python 3 | Declarative presentation generator from JSON/YAML specs with automatic layout synthesis. |
+| [`scripts/theme_engine.py`](scripts/theme_engine.py) | Python 3 | Theme engine with 8 curated visual design themes, token mappings, and font pairings. |
+| [`scripts/keynote_client.py`](scripts/keynote_client.py) | Python 3 | Comprehensive AppleScript wrapper class for Keynote application and document control. |
 | [`scripts/keynote_object_detector.py`](scripts/keynote_object_detector.py) | Python 3 | Spatial object detector, shape color matcher, and Apple Vision healing orchestrator. |
 | [`scripts/keynote_healer.swift`](scripts/keynote_healer.swift) | Swift / Metal | Native Swift Apple Vision OCR & CoreImage GPU inpainting / background analysis engine. |
 | [`scripts/pdf_to_keynote.py`](scripts/pdf_to_keynote.py) | Python / Swift | High-fidelity vector PDF to Keynote converter with auto-aspect ratio matching. |
 | [`scripts/slide_image_bridge.py`](scripts/slide_image_bridge.py) | Python / AppleScript | Slide image extraction, multi-image splitting, and AppleScript automation bridge. |
+| [`references/PALETTES.md`](references/PALETTES.md) | Markdown | 8 design theme specifications, typography pairings, and layout grid standards. |
+| [`references/TEMPLATES.md`](references/TEMPLATES.md) | Markdown | Declarative slide template specifications and multi-slide JSON deck example. |
+| [`references/APPLESCRIPT_REFERENCE.md`](references/APPLESCRIPT_REFERENCE.md) | Markdown | AppleScript dictionary reference, property quirks, and automation patterns. |
 | [`SKILL.md`](SKILL.md) | Markdown | Agentic skill definition, invariants, and comprehensive reference guide. |
 
 ---
@@ -89,6 +98,22 @@ python3 scripts/pdf_to_keynote.py input_deck.pdf -o OutputDeck.key
 Distribute slides with multiple image overlays into individual, clean sequential slides:
 ```bash
 python3 scripts/slide_image_bridge.py split --doc "Presentation.key" --slide 15
+```
+
+### 5. Declarative Multi-Slide Deck Building & Theming (`knt`)
+```bash
+# List all 8 curated design themes
+python3 scripts/keynote_tool.py themes
+
+# Build a multi-slide presentation deck from a JSON specification
+python3 scripts/keynote_tool.py build --spec references/TEMPLATES.md
+
+# Inspect active Keynote document
+python3 scripts/keynote_tool.py info
+
+# Export presentation to PDF or slide images
+python3 scripts/keynote_tool.py export -o ./output.pdf --format pdf
+python3 scripts/keynote_tool.py render -o ./slide_previews/
 ```
 
 ---

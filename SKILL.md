@@ -15,6 +15,9 @@ Unified automation and conversion toolkit for **Apple Keynote** (`.key`) on macO
 
 ## 1. Capabilities & Features
 
+- **Declarative Multi-Slide Deck Builder**: Programmatically synthesizes complete Keynote decks from structured JSON/YAML specifications (`knt build --spec deck.json`), with automated layout synthesis for hero titles, section dividers, comparison cards, KPI metric grids, and code blocks.
+- **8 Curated Visual Themes & Design Tokens**: Integrated theme engine (`knt themes`) offering 8 production-grade visual styles (`amil-light`, `amil-dark`, `terminal-dark`, `apple-light`, `apple-dark`, `nord-frost`, `cyberpunk-neon`, `editorial-serif`) with matched typography, semantic accents, and contrast invariants.
+- **Unified Keynote CLI (`knt` / `keynote-tool`)**: Full command-line interface for active slide inspection, slide CRUD, text search/replace, speaker notes, and multi-format export (PDF, PNG, PPTX, HTML).
 - **Spatial Object Detection by Position**: Queries and detects native Keynote items (shapes, text items, images) and slide graphic elements filtered by spatial quadrants or bounding boxes (`bottom-right`, `bottom-left`, `top-right`, `top-left`, `footer`, `header`, or custom rects).
 - **Shape Background Color Matching & Masking (`--match-shape-color`)**: Crops the exact slide image region underneath any target shape, extracts the true background color (and 2D gradient surface), and adapts the Keynote shape's fill color so it serves as an invisible masking overlay.
 - **Local Apple Vision & CoreImage Healing Brush (`--heal-underneath`)**: Leverages local macOS `Vision` (OCR text & artifact detection) and GPU-accelerated `CoreImage` / `Metal` inpainting to repair and retouch underlying slide images in-place (Apple Photos Clean Up style).
@@ -30,39 +33,69 @@ Unified automation and conversion toolkit for **Apple Keynote** (`.key`) on macO
 
 Installed in `~/.local/bin`:
 
-| Command | Shortcut Alias | Function |
+| Command Category | Command | Description |
 |---|---|---|
-| `pdf-to-keynote` | `keynote-convert` | Convert any PDF presentation to native `.key` and open in Keynote |
-| `keynote-object-tool` | `keynote-detect` | Inspect objects by position, match shape fill color, and run healing brush |
+| **Deck Builder** | `knt build --spec <spec.json>` | Build multi-slide presentation deck from JSON/YAML spec |
+| **Themes** | `knt themes [--json]` | List 8 curated visual design themes and palette tokens |
+| **Document Info** | `knt info [--json]` | Inspect active presentation name, dimensions, slides, and master layouts |
+| **Slides List** | `knt slides list [--json]` | List all slides with layout name, items count, and notes preview |
+| **Slide Details** | `knt slides get <n> [--json]` | Deep inspect slide items (shapes, text, tables, images, notes) |
+| **Text Operations** | `knt text find "query"` / `replace "old" "new"` | Search and replace text across all slides or on a specific slide |
+| **Speaker Notes** | `knt notes get <n>` / `set <n> --text "..."` | Read or update presenter notes |
+| **Export Deck** | `knt export --format <pdf\|png\|pptx\|html> -o <path>` | Export presentation to file or image folder |
+| **PDF Conversion** | `pdf-to-keynote <input.pdf> -o <output.key>` | Convert PDF presentation to native `.key` |
+| **Object Detection** | `keynote-object-tool --zone bottom-right` | Inspect objects by position, match shape fill, and run healing brush |
 
 ### Usage Examples
 
 ```bash
-# 1. Inspect native objects and spatial zones across all slides in active Keynote presentation
-python3 ~/.gemini/config/skills/keynote-tools/scripts/keynote_object_detector.py --info --slides all
+# 1. List curated design themes
+knt themes
 
-# 2. Extract background color beneath bottom-right shapes and adapt shape fill to mask it
-python3 ~/.gemini/config/skills/keynote-tools/scripts/keynote_object_detector.py --match-shape-color --zone bottom-right --save-crops ./crops
+# 2. Programmatically generate a complete slide deck from specification
+knt build --spec references/TEMPLATES.md
 
-# 3. Apply local Apple Vision + CoreImage healing brush to inpaint bottom-right rectangles across all slides
-python3 ~/.gemini/config/skills/keynote-tools/scripts/keynote_object_detector.py --heal-underneath --zone bottom-right --slides all --save-crops ./crops
+# 3. Inspect active Keynote document and slide hierarchy
+knt info
+knt slides list
 
-# 4. Clean bottom-right rectangles on specific slides (e.g. slides 2 through 10)
-python3 ~/.gemini/config/skills/keynote-tools/scripts/keynote_object_detector.py --heal-underneath --zone bottom-right --slides 2-10
+# 4. Search and replace text across the entire presentation
+knt text replace "Old Company" "New Venture"
 
-# 5. Process a standalone slide image or diagram directly using the healing brush
-python3 ~/.gemini/config/skills/keynote-tools/scripts/keynote_object_detector.py --image slide_mockup.png --zone bottom-right --save-crops ./crops --output cleaned_slide.png
+# 5. Export presentation to PDF or slide images
+knt export -o ./output.pdf --format pdf
+knt render -o ./slide_previews/
+
+# 6. Inspect native objects and spatial zones across all slides
+python3 scripts/keynote_object_detector.py --info --slides all
+
+# 7. Extract background color beneath bottom-right shapes and adapt shape fill
+python3 scripts/keynote_object_detector.py --match-shape-color --zone bottom-right --save-crops ./crops
+
+# 8. Apply local Apple Vision + CoreImage healing brush to inpaint bottom-right rectangles
+python3 scripts/keynote_object_detector.py --heal-underneath --zone bottom-right --slides all --save-crops ./crops
+
+# 9. Convert vector PDF slide deck to native Keynote
+python3 scripts/pdf_to_keynote.py input_deck.pdf -o OutputDeck.key
 ```
 
 ---
 
 ## 3. Architecture & Script References
 
-- **Object Detector & Healing Suite**: `~/.gemini/config/skills/keynote-tools/scripts/keynote_object_detector.py`
-- **Native Swift Vision & CoreImage Engine**: `~/.gemini/config/skills/keynote-tools/scripts/keynote_healer` (compiled from `keynote_healer.swift`)
-- **Converter Engine**: `~/.gemini/config/skills/keynote-tools/scripts/pdf_to_keynote.py`
-- **Slide Image Bridge**: `~/.gemini/config/skills/keynote-tools/scripts/slide_image_bridge.py`
-- **macOS Requirements**: macOS with `/Applications/Keynote.app` installed, Swift compiler (`swift`), and standard `osascript`.
+- **Unified CLI (`knt` / `keynote-tool`)**: `scripts/keynote_tool.py`
+- **Declarative Deck Builder**: `scripts/deck_builder.py`
+- **Curated Theme Engine**: `scripts/theme_engine.py`
+- **AppleScript Client & Automation Engine**: `scripts/keynote_client.py`
+- **Object Detector & Healing Suite**: `scripts/keynote_object_detector.py`
+- **Native Swift Vision & CoreImage Engine**: `scripts/keynote_healer` (compiled from `keynote_healer.swift`)
+- **PDF-to-Keynote Converter**: `scripts/pdf_to_keynote.py`
+- **Slide Image Bridge**: `scripts/slide_image_bridge.py`
+- **Reference Guides**:
+  - `references/PALETTES.md`: Design tokens, palettes, and typography pairings.
+  - `references/TEMPLATES.md`: Declarative slide template specifications.
+  - `references/APPLESCRIPT_REFERENCE.md`: Complete Keynote AppleScript dictionary.
+- **macOS Requirements**: macOS with `/Applications/Keynote.app` installed, Swift compiler (`swiftc`), and standard `osascript`.
 
 ---
 
